@@ -5,6 +5,11 @@
 # Changelog:
 #
 # Updated: 18 NOV 2026
+# - Add --lto (link-time optimization) and --no-fortify (glibc FD_SETSIZE workaround)
+# - Unknown Raspberry Pi revision codes are decoded instead of aborting; fix CM5 c04180 = 4GB
+# - Gentoo: use dev-libs/libltdl and install gentoolkit (equery) when missing
+# - Stop when an extpkgs make or make install fails instead of continuing
+# - Move Pi table and build-flag logic into lib/hercules-helper modules; add tests/unit-smoke.sh
 # - Pin SDL Hyperion to develop 08d98d0b (2026-11-16)
 # - Drop macOS warning hunks now fixed upstream (hyperion e9e8985c); keep maketape
 # - Build unpatched with a warning instead of aborting when the patch no longer applies

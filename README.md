@@ -93,6 +93,9 @@ Sub-functions (in order of operation):
        --no-tests     skip running 'make check'
        --no-install   skip 'make install' after building
        --no-setcap    skip running 'setcap'
+       --lto          build Hercules and extpkgs with link-time optimization
+       --no-fortify   build without glibc _FORTIFY_SOURCE (workaround for
+                      'bit out of range 0 - FD_SETSIZE' crashes, e.g. Ubuntu 24.04)
        --no-envscript skip creating script to set environment variables
        --no-bashrc    skip modifying .bashrc to set environment variables
 
@@ -227,6 +230,36 @@ During `make check` on macOS, Helper temporarily exposes `libregina.dylib` in
 Hyperion's libtool `.libs` directory. This prevents the protected `/bin/sh`
 test-launch boundary from incorrectly skipping testcase 3211. The temporary
 link is removed after the test run.
+
+### Optional build flags
+
+Both options are off by default.
+
+- `--lto` enables link-time optimization: `-flto=thin` with Clang and
+  `-flto=auto` with GCC for Hercules itself. For the external packages it uses
+  CMake's `CMAKE_INTERPROCEDURAL_OPTIMIZATION`, so CMake picks the matching
+  archiver (`gcc-ar`, `llvm-ar`). Builds take longer. Measured speed-ups of
+  about 5–8 % were reported in upstream issue #58.
+- `--no-fortify` builds with `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0`. This is a
+  workaround for the runtime abort `*** bit out of range 0 - FD_SETSIZE on
+  fd_set ***` seen with glibc 2.39 on Ubuntu 24.04 (upstream issue #59). The
+  underlying problem is in Hercules' use of `select()` with descriptors
+  above `FD_SETSIZE`, so prefer a Hyperion fix once one is available.
+
+### Raspberry Pi detection
+
+The board name is looked up in a table of known revision codes in
+`lib/hercules-helper/platform.sh`. A code missing from the table is decoded
+from its bit fields (model type, revision, memory, manufacturer) and reported
+as "decoded, not in table". A new Pi model therefore no longer stops the build
+(upstream issue #49).
+
+### Local checks
+
+```bash
+bash tests/security-smoke.sh
+bash tests/unit-smoke.sh
+```
 
 ### Operational safeguards
 

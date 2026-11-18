@@ -87,6 +87,8 @@ current_time=$(date "+%Y-%m-%d")
 SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 source "$SCRIPT_DIR/lib/hercules-helper/common.sh"
 source "$SCRIPT_DIR/lib/hercules-helper/regina.sh"
+source "$SCRIPT_DIR/lib/hercules-helper/platform.sh"
+source "$SCRIPT_DIR/lib/hercules-helper/flags.sh"
 
 require(){ hh_require_command "$@" || exit 127; }
 
@@ -222,6 +224,12 @@ opt_no_install=${opt_no_install:-false}
 
 # --no-setcap    skip running \'setcap\'
 opt_no_setcap=${opt_no_setcap:-false}
+
+# --lto          build with link-time optimization
+opt_lto=${opt_lto:-false}
+
+# --no-fortify   build without glibc _FORTIFY_SOURCE
+opt_no_fortify=${opt_no_fortify:-false}
 
 # --no-envscript skip creating script to set environment variables
 opt_no_envscript=${opt_no_envscript:-false}
@@ -435,6 +443,9 @@ Sub-functions (in order of operation):
        --no-tests     skip running 'make check'
        --no-install   skip 'make install' after building
        --no-setcap    skip running 'setcap'
+       --lto          build Hercules and extpkgs with link-time optimization
+       --no-fortify   build without glibc _FORTIFY_SOURCE (workaround for
+                      'bit out of range 0 - FD_SETSIZE' crashes, e.g. Ubuntu 24.04)
        --no-envscript skip creating script to set environment variables
        --no-bashrc    skip modifying .bashrc/.zshrc to set environment variables
        --no-zshrc     skip modifying .bashrc/.zshrc to set environment variables
@@ -524,61 +535,9 @@ function get_pi_version()
 
 function check_pi_version()
 {
-    # Source:
-    # https://www.raspberrypi.org/documentation/hardware/raspberrypi/revision-codes/README.md
-
-  local -rA RPI_REVISIONS=(
-    [900021]="A+        1.1     512MB   Sony UK"
-    [900032]="B+        1.2     512MB   Sony UK"
-    [900092]="Zero      1.2     512MB   Sony UK"
-    [900093]="Zero      1.3     512MB   Sony UK"
-    [9000c1]="Zero W    1.1     512MB   Sony UK"
-    [9020e0]="3A+       1.0     512MB   Sony UK"
-    [902120]="Zero 2 W  1.0     512MB   Sony UK"
-    [920092]="Zero      1.2     512MB   Embest"
-    [920093]="Zero      1.3     512MB   Embest"
-    [900061]="CM        1.1     512MB   Sony UK"
-    [a01040]="2B        1.0     1GB     Sony UK"
-    [a01041]="2B        1.1     1GB     Sony UK"
-    [a02082]="3B        1.2     1GB     Sony UK"
-    [a020a0]="CM3       1.0     1GB     Sony UK"
-    [a020d3]="3B+       1.3     1GB     Sony UK"
-    [a02042]="2B (with BCM2837)         1.2     1GB     Sony UK"
-    [a21041]="2B        1.1     1GB     Embest"
-    [a22042]="2B (with BCM2837)         1.2     1GB     Embest"
-    [a22082]="3B        1.2     1GB     Embest"
-    [a220a0]="CM3       1.0     1GB     Embest"
-    [a32082]="3B        1.2     1GB     Sony Japan"
-    [a52082]="3B        1.2     1GB     Stadium"
-    [a22083]="3B        1.3     1GB     Embest"
-    [a02100]="CM3+      1.0     1GB     Sony UK"
-    [a03111]="4B        1.1     1GB     Sony UK"
-    [b03111]="4B        1.1     2GB     Sony UK"
-    [b03112]="4B        1.2     2GB     Sony UK"
-    [b03114]="4B        1.4     2GB     Sony UK"
-    [b03115]="4B        1.5     2GB     Sony UK"
-    [c03111]="4B        1.1     4GB     Sony UK"
-    [c03112]="4B        1.2     4GB     Sony UK"
-    [c03114]="4B        1.4     4GB     Sony UK"
-    [c03115]="4B        1.5     4GB     Sony UK"
-    [d03114]="4B        1.4     8GB     Sony UK"
-    [d03115]="4B        1.5     8GB     Sony UK"
-    [c03130]="Pi 400    1.0     4GB     Sony UK"
-    [c03131]="Pi 400    1.1     4GB     Sony UK"
-    [d04190]="Pi 500    1.0     8GB     Sony UK"
-    [e04190]="Pi 500+   1.1    16GB     Sony UK"
-    [a03140]="CM4       1.0     1GB     Sony UK"
-    [b03140]="CM4       1.0     2GB     Sony UK"
-    [c03140]="CM4       1.0     4GB     Sony UK"
-    [d03140]="CM4       1.0     8GB     Sony UK"
-    [c04170]="5B        1.0     4GB            "
-    [d04170]="5B        1.0     8GB            "
-    [e04171]="5B        1.1    16GB            "
-    [c04180]="CM5       1.0    16GB            "
-    [e04180]="CM5       1.0    16GB            "
-  )
-
-    verbose_msg "Raspberry Pi     : ${RPI_REVISIONS[$RPI_REVCODE]} ($RPI_REVCODE)"
+    # Table and decoder live in lib/hercules-helper/platform.sh.
+    # An unknown revision code no longer aborts the build (upstream issue #49).
+    verbose_msg "Raspberry Pi     : $(hh_pi_describe_revision "${RPI_REVCODE:-}") (${RPI_REVCODE:-?})"
 }
 
 function detect_pi()
@@ -1887,6 +1846,8 @@ opt_override_no_make=false        # Run make (compile and link)
 opt_override_no_tests=false       # Run make check
 opt_override_no_install=false     # Run make install
 opt_override_no_setcap=false      # setcap executables
+opt_override_lto=false            # link-time optimization
+opt_override_no_fortify=false     # disable _FORTIFY_SOURCE
 opt_override_no_envscript=false   # Create script to set environment variables
 opt_override_no_bashrc=false      # Add "source" to set environment variables from .bashrc
 
@@ -2065,6 +2026,16 @@ case $key in
 
   --no-setcap) # skip 'setcap'
     opt_override_no_setcap=true
+    shift # past argument
+    ;;
+
+  --lto) # link-time optimization
+    opt_override_lto=true
+    shift # past argument
+    ;;
+
+  --no-fortify) # disable glibc _FORTIFY_SOURCE
+    opt_override_no_fortify=true
     shift # past argument
     ;;
 
@@ -2278,6 +2249,8 @@ if [ $opt_override_no_make      == true ]; then opt_no_make=true; fi
 if [ $opt_override_no_tests     == true ]; then opt_no_tests=true; fi
 if [ $opt_override_no_install   == true ]; then opt_no_install=true; fi
 if [ $opt_override_no_setcap    == true ]; then opt_no_setcap=true; fi
+if [ $opt_override_lto          == true ]; then opt_lto=true; fi
+if [ $opt_override_no_fortify   == true ]; then opt_no_fortify=true; fi
 if [ $opt_override_no_envscript == true ]; then opt_no_envscript=true; fi
 if [ $opt_override_no_bashrc    == true ]; then opt_no_bashrc=true; fi
 
@@ -3174,8 +3147,26 @@ https://my.velocihost.net/knowledgebase/29/Fix-the-apt-get-install-error-Media-c
               "dev-build/autoconf" "dev-build/automake" \
               "dev-build/cmake" "sys-devel/flex" "sys-apps/gawk" "sys-devel/m4" \
               "app-arch/bzip2" \
-              "dev-build/make" "dev-build/libtool" "dev-build/libltdl"
+              "dev-build/make" "dev-build/libtool" "dev-libs/libltdl"
           )
+
+          # emerge -a asks for confirmation; only use it when prompts are on.
+          if ($opt_prompts); then
+              gentoo_emerge_opts="-av"
+          else
+              gentoo_emerge_opts="-v"
+          fi
+
+          # equery (used below to check installed packages) is part of gentoolkit,
+          # which a fresh Gentoo install does not have (upstream issue #51).
+          if [ ! -x /usr/bin/equery ]; then
+              echo "equery not found, installing app-portage/gentoolkit"
+              $HH_SUDOCMD /usr/bin/emerge $gentoo_emerge_opts app-portage/gentoolkit
+              if [ ! -x /usr/bin/equery ]; then
+                  error_msg "app-portage/gentoolkit (equery) is required to check packages"
+                  exit 1
+              fi
+          fi
 
           echo "Required packages: "
           echo "${gentoo_packages[*]}"
@@ -3194,7 +3185,7 @@ https://my.velocihost.net/knowledgebase/29/Fix-the-apt-get-install-error-Media-c
               else
                   echo "$package : must be installed"
                   echo "Installing package: $package"
-                  $HH_SUDOCMD /usr/bin/emerge -av $package
+                  $HH_SUDOCMD /usr/bin/emerge $gentoo_emerge_opts $package
               fi
           done
     return
@@ -3258,6 +3249,8 @@ verbose_msg "  --no-make       : $opt_no_make"
 verbose_msg "  --no-tests      : $opt_no_tests"
 verbose_msg "  --no-install    : $opt_no_install"
 verbose_msg "  --no-setcap     : $opt_no_setcap"
+verbose_msg "  --lto           : $opt_lto"
+verbose_msg "  --no-fortify    : $opt_no_fortify"
 verbose_msg "  --no-envscript  : $opt_no_envscript"
 verbose_msg "  --no-bashrc     : $opt_no_bashrc"
 verbose_msg    # print a newline
@@ -4439,6 +4432,10 @@ else
             cmake_args+=("${HH_WORDS[@]}")
             cmake_args+=("-DINSTALL_PREFIX=$opt_build_dir/extpkgs")
             cmake_args+=("-DLIB_INSTALL_DIR=lib$hc_cv_pkg_lib_subdir")
+            hh_build_extra_cmake_args "$opt_lto"
+            if [ ${#HH_EXTRA_CMAKE_ARGS[@]} -gt 0 ]; then
+                cmake_args+=("${HH_EXTRA_CMAKE_ARGS[@]}")
+            fi
             cmake_args+=("$opt_build_dir/extpkgs/$pkg")
 
             add_build_entry "rm -f CMakeCache.txt"
@@ -4459,8 +4456,14 @@ else
             fi
 
             make clean
-            make -j 2 all
-            make install
+            if ! make -j 2 all; then
+                error_msg "ERROR: make of extpkg $pkg failed!"
+                exit 3
+            fi
+            if ! make install; then
+                error_msg "ERROR: make install of extpkg $pkg failed!"
+                exit 3
+            fi
          popd
     done
 
@@ -4794,6 +4797,17 @@ add_build_entry "    $enable_oorexx_option \\"
 add_build_entry "    $enable_ipv6_option \\"
 add_build_entry "    $enable_getoptwrapper_option \\"
 add_build_entry "    $without_included_ltdl_option"
+
+    # Optional --lto / --no-fortify flags (upstream issues #58, #59)
+    hh_build_extra_flags "$CC" "$opt_lto" "$opt_no_fortify"
+    if [ -n "$HH_EXTRA_CFLAGS" ]; then
+        export CFLAGS="${CFLAGS:+$CFLAGS }$HH_EXTRA_CFLAGS"
+        add_build_entry "export CFLAGS=\"\$CFLAGS $HH_EXTRA_CFLAGS\""
+    fi
+    if [ -n "$HH_EXTRA_LDFLAGS" ]; then
+        export LDFLAGS="${LDFLAGS:+$LDFLAGS }$HH_EXTRA_LDFLAGS"
+        add_build_entry "export LDFLAGS=\"\$LDFLAGS $HH_EXTRA_LDFLAGS\""
+    fi
 
     # Actually do the configure
     verbose_msg "CFLAGS=$CFLAGS"
