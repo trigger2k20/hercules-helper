@@ -10,3 +10,20 @@ hyperion/
 aethra/
 Regina-*/
 herc4x/
+
+# macOS special files
+.DS_Store
+._*
+.AppleDouble
+.AppleDB
+.AppleDesktop
+.localized
+.VolumeIcon.icns
+.com.apple.timemachine.supported
+.Spotlight-V100
+.fseventsd
+.Trashes
+.TemporaryItems
+.DocumentRevisions-V100
+.PKInstallSandboxManager-SystemSoftware
+.vol
